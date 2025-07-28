@@ -16,6 +16,20 @@ macro_rules! interpolation {
     };
 }
 
+fn color_map(data: &mut [u8]) {
+    let rl = 0xae as f32;
+    let gl = 0x98 as f32;
+    let bl = 0xb5 as f32;
+    let r = 0x0 as f32;
+    data.chunks_mut(3).for_each(|rgb| {
+        let lum =
+            ((0.30 * rgb[0] as f32) + (0.59 * rgb[1] as f32) + (0.11 * rgb[2] as f32)) / 255.0;
+        rgb[0] = interpolation!(r, rl, lum) as u8;
+        rgb[1] = interpolation!(r, gl, lum) as u8;
+        rgb[2] = interpolation!(r, bl, lum) as u8;
+    });
+}
+
 fn resize_image(input: &Thumbnail, width: usize, height: usize) -> Vec<u8> {
     let w_factor: f32 = ((input.width - 1) as f32) / ((width - 1) as f32);
     let h_factor: f32 = ((input.height - 1) as f32) / ((height - 1) as f32);
@@ -77,17 +91,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         .expect("Failed to read byte array");
     let (width, height, depth) = (image.1.width, image.1.height, image.1.color_depth);
 
-    let data = Thumbnail {
+    let mut data = Thumbnail {
         data: decoder,
         width: width as usize,
         height: height as usize,
     };
 
-    let vec = resize_image(&data, 128, 128);
+    color_map(&mut data.data);
+    let mut vec = resize_image(&data, 256, 256);
 
     let writer = BufWriter::new(File::create("bilinear.png")?);
 
-    let mut encoder = png::Encoder::new(writer, 128, 128);
+    let mut encoder = png::Encoder::new(writer, 256, 256);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
 
