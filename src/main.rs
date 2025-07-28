@@ -16,17 +16,25 @@ macro_rules! interpolation {
     };
 }
 
-fn color_map(data: &mut [u8]) {
-    let rl = 0xae as f32;
-    let gl = 0x98 as f32;
-    let bl = 0xb5 as f32;
-    let r = 0x0 as f32;
+macro_rules! get_rgb {
+    ($num:expr) => {
+        (
+            (($num >> 16) & 0xff) as f32,
+            (($num >> 8) & 0xff) as f32,
+            ($num & 0xff) as f32,
+        )
+    };
+}
+
+fn color_map(data: &mut [u8], upper: u32, lower: u32) {
+    let (ru, gu, bu) = get_rgb!(upper);
+    let (rl, gl, bl) = get_rgb!(lower);
     data.chunks_mut(3).for_each(|rgb| {
         let lum =
             ((0.30 * rgb[0] as f32) + (0.59 * rgb[1] as f32) + (0.11 * rgb[2] as f32)) / 255.0;
-        rgb[0] = interpolation!(r, rl, lum) as u8;
-        rgb[1] = interpolation!(r, gl, lum) as u8;
-        rgb[2] = interpolation!(r, bl, lum) as u8;
+        rgb[0] = interpolation!(rl, ru, lum) as u8;
+        rgb[1] = interpolation!(gl, gu, lum) as u8;
+        rgb[2] = interpolation!(bl, bu, lum) as u8;
     });
 }
 
@@ -36,7 +44,6 @@ fn resize_image(input: &Thumbnail, width: usize, height: usize) -> Vec<u8> {
     let mut pixel_data = vec![0; width * height * 3];
 
     for i in 0..width * height {
-        //(y, x) position of input image
         let x: f32 = (i % width) as f32 * w_factor;
         let y: f32 = (i / width) as f32 * h_factor;
 
@@ -86,19 +93,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         .ok_or("Failed to get image")?;
 
     //TODO: implement support for png (trivial)
-    let mut decoder = Decoder::new(image.0.data())
+    let image_pixels = Decoder::new(image.0.data())
         .decode()
         .expect("Failed to read byte array");
     let (width, height, depth) = (image.1.width, image.1.height, image.1.color_depth);
 
-    let mut data = Thumbnail {
-        data: decoder,
+    let mut icon = Thumbnail {
+        data: image_pixels,
         width: width as usize,
         height: height as usize,
     };
 
-    color_map(&mut data.data);
-    let mut vec = resize_image(&data, 256, 256);
+    color_map(&mut icon.data, 0xae98b5, 0x0);
+    let vec = resize_image(&icon, 256, 256);
 
     let writer = BufWriter::new(File::create("bilinear.png")?);
 
